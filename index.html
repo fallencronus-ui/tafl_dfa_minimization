@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DFA Minimization Visualizer</title>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for in-browser JSX parsing -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Framer Motion for premium animations -->
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Vis-Network for Graph Visualization -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+    <style>
+        /* Custom Styles & Scrollbar for premium feel */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #020617; /* Slate 950 */
+            color: #f8fafc;
+            overflow-x: hidden;
+            margin: 0;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Animated High-Tech Grid Background */
+        .cyber-bg {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background-image: 
+                linear-gradient(rgba(15, 23, 42, 0.8), rgba(2, 6, 23, 0.9)),
+                linear-gradient(rgba(56, 189, 248, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.05) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            background-position: center;
+            z-index: -2;
+        }
+
+        /* Subtle glowing orbs for depth */
+        .ambient-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.4;
+            z-index: -1;
+            animation: float 20s infinite ease-in-out alternate;
+        }
+        .orb-1 { width: 400px; height: 400px; background: #3b82f6; top: -10%; left: -10%; }
+        .orb-2 { width: 500px; height: 500px; background: #8b5cf6; bottom: -20%; right: -10%; animation-delay: -5s; }
+        .orb-3 { width: 300px; height: 300px; background: #06b6d4; top: 40%; left: 40%; animation-delay: -10s; opacity: 0.2; }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(30px, 50px) scale(1.1); }
+        }
+
+        /* Glassmorphism utilities */
+        .glass {
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .glass-panel {
+            background: linear-gradient(165deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8));
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255,255,255,0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(2, 6, 23, 0.5); }
+        ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.6); }
+
+        /* Vis Network Overrides */
+        .vis-network { outline: none; }
+        
+        /* High-Tech Tooltip */
+        div.vis-tooltip {
+            background-color: rgba(2, 6, 23, 0.9) !important;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(56, 189, 248, 0.5) !important;
+            color: #38bdf8 !important;
+            border-radius: 8px !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            padding: 10px 14px !important;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.3) !important;
+            font-size: 14px !important;
+            font-weight: bold;
+        }
+
+        /* Input Neon Focus */
+        .neon-input:focus {
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+            border-color: rgba(56, 189, 248, 0.8);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Cyberpunk Animated Background -->
+    <div class="cyber-bg"></div>
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+        const { motion, AnimatePresence, LayoutGroup } = window.Motion; // Framer Motion
+
+        // --- CONSTANTS & HELPERS ---
+        const PARTITION_COLORS = [
+            { bg: '#1e3a8a', border: '#3b82f6', shadow: '#60a5fa' }, // Blue
+            { bg: '#7f1d1d', border: '#ef4444', shadow: '#f87171' }, // Red
+            { bg: '#064e3b', border: '#10b981', shadow: '#34d399' }, // Green
+            { bg: '#78350f', border: '#f59e0b', shadow: '#fbbf24' }, // Yellow
+            { bg: '#4c1d95', border: '#8b5cf6', shadow: '#a78bfa' }, // Purple
+            { bg: '#831843', border: '#ec4899', shadow: '#f472b6' }, // Pink
+            { bg: '#164e63', border: '#06b6d4', shadow: '#22d3ee' }, // Cyan
+        ];
+
+        const SAMPLE_DFA = {
+            states: ['q0', 'q1', 'q2', 'q3', 'q4', 'q5'],
+            alphabet: ['0', '1'],
+            startState: 'q0',
+            acceptingStates: ['q2', 'q3', 'q4'],
+            transitions: {
+                'q0': { '0': 'q1', '1': 'q2' },
+                'q1': { '0': 'q0', '1': 'q3' },
+                'q2': { '0': 'q4', '1': 'q5' },
+                'q3': { '0': 'q4', '1': 'q5' },
+                'q4': { '0': 'q4', '1': 'q5' },
+                'q5': { '0': 'q5', '1': 'q5' }
+            }
+        };
+
+        const QUIZ_QUESTIONS = [
+            {
+                dfa: {
+                    states: ['q0', 'q1', 'q2'],
+                    alphabet: ['0', '1'],
+                    startState: 'q0',
+                    acceptingStates: ['q2'],
+                    transitions: { 'q0': { '0': 'q1', '1': 'q2' }, 'q1': { '0': 'q1', '1': 'q2' }, 'q2': { '0': 'q2', '1': 'q2' } }
+                },
+                text: "Analyze the DFA matrix. Which set of states are equivalent?",
+                options: [
+                    { label: "States { q0, q1 }", isCorrect: true },
+                    { label: "States { q1, q2 }", isCorrect: false },
+                    { label: "States { q0, q2 }", isCorrect: false },
+                    { label: "No states are equivalent", isCorrect: false }
+                ],
+                explanation: "Correct! q0 and q1 both transition to q1 on '0' and to q2 on '1'. Neither is an accepting state, so they are indistinguishable and can be safely merged."
+            },
+            {
+                dfa: {
+                    states: ['A', 'B', 'C', 'D'],
+                    alphabet: ['a', 'b'],
+                    startState: 'A',
+                    acceptingStates: ['C'],
+                    transitions: { 'A': { 'a': 'B', 'b': 'A' }, 'B': { 'a': 'C', 'b': 'B' }, 'C': { 'a': 'C', 'b': 'C' }, 'D': { 'a': 'A', 'b': 'C' } }
+                },
+                text: "Identify the structural anomaly. Which state must be eliminated first?",
+                options: [
+                    { label: "State A", isCorrect: false },
+                    { label: "State B", isCorrect: false },
+                    { label: "State C", isCorrect: false },
+                    { label: "State D", isCorrect: true }
+                ],
+                explanation: "State D is completely unreachable from the boot node (A). It wastes system memory and must be pruned before performing partition equivalence."
+            },
+            {
+                dfa: {
+                    states: ['S0', 'S1'],
+                    alphabet: ['x', 'y'],
+                    startState: 'S0',
+                    acceptingStates: ['S1'],
+                    transitions: { 'S0': { 'x': 'S1', 'y': 'S0' }, 'S1': { 'x': 'S0', 'y': 'S1' } }
+                },
+                text: "Evaluate this simple system. Are there any equivalent states?",
+                options: [
+                    { label: "Yes, { S0, S1 }", isCorrect: false },
+                    { label: "No, it is strictly minimal", isCorrect: true }
+                ],
+                explanation: "S1 is an accepting state while S0 is not. They fall into completely separate partitions during the initial 0-equivalence step, so they can never be merged."
+            },
+            {
+                dfa: {
+                    states: ['q0', 'q1', 'q2', 'q3'],
+                    alphabet: ['0', '1'],
+                    startState: 'q0',
+                    acceptingStates: ['q3'],
+                    transitions: { 'q0': { '0': 'q1', '1': 'q2' }, 'q1': { '0': 'q3', '1': 'q3' }, 'q2': { '0': 'q3', '1': 'q3' }, 'q3': { '0': 'q3', '1': 'q3' } }
+                },
+                text: "Deep analysis required. Which pair of states share identical transition signatures and can be merged?",
+                options: [
+                    { label: "States { q0, q1 }", isCorrect: false },
+                    { label: "States { q1, q2 }", isCorrect: true },
+                    { label: "States { q2, q3 }", isCorrect: false },
+                    { label: "They are all distinct", isCorrect: false }
+                ],
+                explanation: "Correct! Both q1 and q2 are non-accepting and transition exclusively to q3 for all inputs. They form a stable equivalent cluster and can be safely merged."
+            },
+            {
+                dfa: {
+                    states: ['A', 'B', 'C', 'D', 'E'],
+                    alphabet: ['0', '1'],
+                    startState: 'A',
+                    acceptingStates: ['E'],
+                    transitions: { 
+                        'A': { '0': 'B', '1': 'C' }, 
+                        'B': { '0': 'D', '1': 'D' }, 
+                        'C': { '0': 'D', '1': 'D' }, 
+                        'D': { '0': 'E', '1': 'E' }, 
+                        'E': { '0': 'E', '1': 'E' } 
+                    }
+                },
+                text: "Final Assessment: If you fully minimize this 5-state DFA, how many states will remain in the optimized architecture?",
+                options: [
+                    { label: "2 States", isCorrect: false },
+                    { label: "3 States", isCorrect: false },
+                    { label: "4 States", isCorrect: true },
+                    { label: "5 States (Already Minimal)", isCorrect: false }
+                ],
+                explanation: "Correct! States B and C are equivalent (both non-accepting, both go to D). They merge into {B,C}. The final states are {A}, {B,C}, {D}, and {E}, totaling 4 optimized states."
+            }
+        ];
+
+        // Futuristic Node Generator with built-in glowing filters
+        const createNodeSvg = (label, isAccepting, color) => {
+            const svg = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="90" height="90" viewBox="0 0 90 90">
+                    <defs>
+                        <filter id="glow_${color.border.replace('#','')}" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="4" result="blur" />
+                            <feMerge>
+                                <feMergeNode in="blur"/>
+                                <feMergeNode in="blur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    <!-- Outer Neon Ring -->
+                    <circle cx="45" cy="45" r="38" fill="${color.bg}" fill-opacity="0.8" stroke="${color.border}" stroke-width="3" filter="url(#glow_${color.border.replace('#','')})" />
+                    
+                    <!-- Inner Tech Details -->
+                    ${isAccepting ? 
+                        `<circle cx="45" cy="45" r="30" fill="none" stroke="${color.border}" stroke-width="2" stroke-dasharray="6 4" opacity="0.9"/>
+                         <circle cx="45" cy="45" r="26" fill="none" stroke="${color.border}" stroke-width="1" opacity="0.5"/>` 
+                        : 
+                        `<circle cx="45" cy="45" r="32" fill="none" stroke="${color.border}" stroke-width="1" opacity="0.3"/>`
+                    }
+                    
+                    <text x="45" y="51" font-family="'JetBrains Mono', monospace" font-weight="bold" font-size="18" text-anchor="middle" fill="#ffffff" filter="drop-shadow(0px 0px 2px #fff)">${label}</text>
+                </svg>
+            `;
+            return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+        };
+
+        // Icons
+        const PlayIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>;
+        const PauseIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>;
+        const NextIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>;
+        const ResetIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>;
+
+        // --- ALGORITHM ---
+        const getSubscript = (num) => num.toString().split('').map(d => ['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'][d]).join('');
+        
+        const formatPi = (k, partitions) => {
+            const sets = partitions.map(g => `{${g.join(',')}}`).join(', ');
+            return `π${getSubscript(k)} = { ${sets} }`;
+        };
+
+        const buildPartitionTable = (dfaStates, oldGroups, newGroups, dfa) => {
+            let rows = [];
+            dfaStates.forEach(state => {
+                let row = { state, inputs: {}, newGroupIndex: -1 };
+                dfa.alphabet.forEach(sym => {
+                    let target = dfa.transitions[state]?.[sym];
+                    let targetGIdx = oldGroups.findIndex(g => g.includes(target));
+                    row.inputs[sym] = targetGIdx !== -1 ? targetGIdx : '-';
+                });
+                row.newGroupIndex = newGroups.findIndex(g => g.includes(state));
+                rows.push(row);
+            });
+            rows.sort((a, b) => a.newGroupIndex - b.newGroupIndex);
+            return rows;
+        };
+
+        function generateMinimizationSteps(dfa) {
+            let steps = [];
+            
+            // 1. Find Reachable States
+            let reachable = new Set([dfa.startState]);
+            let queue = [dfa.startState];
+            while(queue.length > 0) {
+                let q = queue.shift();
+                for (let symbol of dfa.alphabet) {
+                    let next = dfa.transitions[q]?.[symbol];
+                    if (next && !reachable.has(next)) {
+                        reachable.add(next);
+                        queue.push(next);
+                    }
+                }
+            }
+            
+            let unreachable = dfa.states.filter(s => !reachable.has(s));
+            let workingStates = dfa.states.filter(s => reachable.has(s));
+
+            steps.push({
+                title: "Step 1: Remove Unreachable States",
+                description: unreachable.length > 0 
+                    ? `States { ${unreachable.join(', ')} } cannot be reached from start state ${dfa.startState}. They are removed.`
+                    : "All states are reachable. No states removed.",
+                partitions: [workingStates],
+                unreachable: unreachable,
+                isFinal: false
+            });
+
+            // 2. Initial Partition (P0)
+            let finalStates = workingStates.filter(s => dfa.acceptingStates.includes(s));
+            let nonFinalStates = workingStates.filter(s => !dfa.acceptingStates.includes(s));
+            let partitions = [];
+            if (nonFinalStates.length > 0) partitions.push(nonFinalStates);
+            if (finalStates.length > 0) partitions.push(finalStates);
+
+            let piK = 0;
+            steps.push({
+                title: "Step 2: Initial Partition (0-Equivalence)",
+                description: "We separate the states into two initial groups: Accepting states (Final) and Non-Accepting states.",
+                piNotation: formatPi(piK, partitions),
+                partitions: JSON.parse(JSON.stringify(partitions)),
+                partitionTable: buildPartitionTable(workingStates, partitions, partitions, dfa),
+                isFinal: false
+            });
+
+            // 3. Iterative Refinement
+            let p = partitions;
+            let changed = true;
+            
+            while (changed) {
+                changed = false;
+                let newP = [];
+                let splitsOccurred = [];
+
+                for (let group of p) {
+                    if (group.length <= 1) {
+                        newP.push(group);
+                        continue;
+                    }
+                    
+                    let subGroups = {};
+                    for (let state of group) {
+                        let signature = dfa.alphabet.map(symbol => {
+                            let target = dfa.transitions[state][symbol];
+                            return p.findIndex(g => g.includes(target));
+                        }).join(',');
+
+                        if (!subGroups[signature]) subGroups[signature] = [];
+                        subGroups[signature].push(state);
+                    }
+
+                    let splits = Object.values(subGroups);
+                    if (splits.length > 1) {
+                        changed = true;
+                        splitsOccurred.push(`Group {${group.join(',')}} split because states transition to different groups on some inputs.`);
+                    }
+                    newP.push(...splits);
+                }
+
+                if (changed) {
+                    piK++;
+                    steps.push({
+                        title: `Step ${2+piK}: Refine Partitions (${piK}-Equivalence)`,
+                        description: splitsOccurred.join(" "),
+                        piNotation: formatPi(piK, newP),
+                        partitions: JSON.parse(JSON.stringify(newP)),
+                        partitionTable: buildPartitionTable(workingStates, p, newP, dfa),
+                        isFinal: false
+                    });
+                    p = newP;
+                }
+            }
+
+            // Flag this step specifically so UI knows to animate the magnetic merge!
+            steps.push({
+                title: `Step ${2+piK}: Equivalence Stabilized`,
+                description: "No further splitting is possible. States remaining in the same partition are strictly equivalent. Watch them merge!",
+                piNotation: formatPi(piK, p),
+                partitions: JSON.parse(JSON.stringify(p)),
+                partitionTable: buildPartitionTable(workingStates, p, p, dfa),
+                isFinal: false,
+                isStabilized: true 
+            });
+
+            // Final Step: Minimized DFA
+            let finalTransitions = [];
+            p.forEach(group => {
+                let rep = group[0];
+                let stateName = `{${group.join(',')}}`;
+                let transitions = {};
+                dfa.alphabet.forEach(sym => {
+                    let target = dfa.transitions[rep]?.[sym];
+                    if (target) {
+                        let tg = p.find(g => g.includes(target));
+                        transitions[sym] = tg ? `{${tg.join(',')}}` : '-';
+                    } else {
+                        transitions[sym] = '-';
+                    }
+                });
+                finalTransitions.push({ state: stateName, transitions });
+            });
+
+            steps.push({
+                title: "Final Step: Merged Minimized DFA",
+                description: "Equivalent states have been visually merged into single nodes. This is the final optimal DFA.",
+                piNotation: formatPi(piK, p),
+                partitions: JSON.parse(JSON.stringify(p)),
+                finalTransitions: finalTransitions,
+                isFinal: true
+            });
+
+            return steps;
+        }
+
+        // --- COMPONENTS ---
+
+        // NEW: Shared Top Mode Selector Component
+        const ModeSelector = ({ mode, setMode }) => (
+            <div className="flex bg-slate-900/90 p-1.5 rounded-full border border-slate-700/50 shadow-[0_0_20px_rgba(0,0,0,0.6)] z-[100] backdrop-blur-md">
+                {[
+                    { id: 'simulation', label: 'Simulation' },
+                    { id: 'learning', label: 'Learning' },
+                    { id: 'quiz', label: 'Quiz' }
+                ].map(m => (
+                    <button
+                        key={m.id}
+                        onClick={() => setMode(m.id)}
+                        className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 ${
+                            mode === m.id 
+                            ? 'bg-cyan-500/20 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.3)] border border-cyan-500/30' 
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-transparent'
+                        }`}
+                    >
+                        {m.label}
+                    </button>
+                ))}
+            </div>
+        );
+
+        // 1. Futuristic Graph Visualizer Component
+        const DfaGraph = ({ dfa, stepData }) => {
+            const containerRef = useRef(null);
+            const networkRef = useRef(null);
+
+            useEffect(() => {
+                if (!containerRef.current) return;
+
+                const { partitions, isFinal, isStabilized, unreachable } = stepData;
+                let nodesData = [];
+                let edgesData = [];
+
+                if (!isFinal) {
+                    // Show original states, color-coded by partition
+                    dfa.states.forEach(state => {
+                        if (unreachable && unreachable.includes(state)) return;
+
+                        let pIndex = partitions.findIndex(p => p.includes(state));
+                        if (pIndex === -1) pIndex = 0;
+                        const color = PARTITION_COLORS[pIndex % PARTITION_COLORS.length];
+                        const isAcc = dfa.acceptingStates.includes(state);
+
+                        nodesData.push({
+                            id: state,
+                            label: state,
+                            title: `State: ${state} ${isAcc ? '(Accepting)' : ''}\nPartition: G${pIndex+1}`,
+                            shape: 'image',
+                            image: createNodeSvg(state, isAcc, color),
+                            size: 45,
+                        });
+                    });
+
+                    dfa.states.forEach(fromState => {
+                        if (unreachable && unreachable.includes(fromState)) return;
+                        
+                        let transitionMap = {};
+                        dfa.alphabet.forEach(symbol => {
+                            let toState = dfa.transitions[fromState]?.[symbol];
+                            if (toState && (!unreachable || !unreachable.includes(toState))) {
+                                if (!transitionMap[toState]) transitionMap[toState] = [];
+                                transitionMap[toState].push(symbol);
+                            }
+                        });
+
+                        Object.keys(transitionMap).forEach(toState => {
+                            edgesData.push({
+                                from: fromState,
+                                to: toState,
+                                label: transitionMap[toState].join(', '),
+                                arrows: { to: { enabled: true, scaleFactor: 0.8, type: 'arrow' } },
+                                font: { color: '#38bdf8', strokeWidth: 4, strokeColor: '#020617', size: 14, align: 'top', bold: true },
+                                color: { color: 'rgba(56, 189, 248, 0.4)', highlight: 'rgba(56, 189, 248, 1)', hover: 'rgba(56, 189, 248, 0.8)' },
+                                smooth: { type: 'continuous' },
+                                shadow: { enabled: true, color: 'rgba(56, 189, 248, 0.6)', size: 15, x: 0, y: 0 }
+                            });
+                        });
+                    });
+
+                    // MAGIC: If stabilized, add intense invisible gravity between grouped states to animate a magnetic merge!
+                    if (isStabilized) {
+                        partitions.forEach((group) => {
+                            if (group.length > 1) {
+                                let rep = group[0];
+                                for (let i = 1; i < group.length; i++) {
+                                    edgesData.push({
+                                        from: rep,
+                                        to: group[i],
+                                        hidden: true, // Invisible but physics active
+                                        physics: true,
+                                        length: 1, // Pull them to the exact same spot
+                                        springConstant: 1.5 // Very strong magnetic pull
+                                    });
+                                }
+                            }
+                        });
+                    }
+                } else {
+                    // Final Merged Graph
+                    partitions.forEach((group, index) => {
+                        const name = group.join(',');
+                        const color = PARTITION_COLORS[index % PARTITION_COLORS.length];
+                        const isAcc = group.some(s => dfa.acceptingStates.includes(s));
+                        
+                        nodesData.push({
+                            id: name,
+                            label: `{${name}}`,
+                            title: `Merged State: {${name}}\n${isAcc ? 'Accepting' : 'Normal'}`,
+                            shape: 'image',
+                            image: createNodeSvg(`{${name}}`, isAcc, color),
+                            size: 55, // Slightly larger to indicate it's merged
+                        });
+                    });
+
+                    partitions.forEach((group) => {
+                        const fromName = group.join(',');
+                        const repState = group[0];
+                        
+                        let transitionMap = {};
+                        dfa.alphabet.forEach(symbol => {
+                            let originalTarget = dfa.transitions[repState]?.[symbol];
+                            if (originalTarget) {
+                                let targetGroup = partitions.find(p => p.includes(originalTarget));
+                                if (targetGroup) {
+                                    let toName = targetGroup.join(',');
+                                    if (!transitionMap[toName]) transitionMap[toName] = [];
+                                    transitionMap[toName].push(symbol);
+                                }
+                            }
+                        });
+
+                        Object.keys(transitionMap).forEach(toName => {
+                            edgesData.push({
+                                from: fromName,
+                                to: toName,
+                                label: transitionMap[toName].join(', '),
+                                arrows: { to: { enabled: true, scaleFactor: 1, type: 'arrow' } },
+                                font: { color: '#a78bfa', strokeWidth: 4, strokeColor: '#020617', size: 16, align: 'top', bold: true },
+                                color: { color: 'rgba(167, 139, 250, 0.6)', highlight: 'rgba(167, 139, 250, 1)', width: 3 },
+                                smooth: { type: 'continuous' },
+                                shadow: { enabled: true, color: 'rgba(167, 139, 250, 0.8)', size: 20, x: 0, y: 0 }
+                            });
+                        });
+                    });
+                }
+
+                // Add Holographic Start Arrow
+                let startTarget = isFinal 
+                    ? partitions.find(p => p.includes(dfa.startState))?.join(',')
+                    : dfa.startState;
+                
+                if (startTarget) {
+                    nodesData.push({ id: 'START_GHOST', shape: 'text', label: 'START', font: {color: '#10b981', size: 16, bold: true} });
+                    edgesData.push({
+                        from: 'START_GHOST', to: startTarget, 
+                        arrows: 'to', 
+                        color: { color: '#10b981', width: 3 }, 
+                        dashes: [5, 5], length: 80,
+                        shadow: { enabled: true, color: 'rgba(16, 185, 129, 0.8)', size: 10 }
+                    });
+                }
+
+                const data = { nodes: nodesData, edges: edgesData };
+                
+                const options = {
+                    physics: {
+                        solver: 'forceAtlas2Based',
+                        forceAtlas2Based: { gravitationalConstant: -120, springConstant: 0.04, springLength: 150, damping: 0.8 },
+                        stabilization: { iterations: 50, updateInterval: 10 }, // Quick stabilize to show fluid motion
+                    },
+                    interaction: { 
+                        hover: true, 
+                        tooltipDelay: 100,
+                        zoomSpeed: 0.8
+                    },
+                    nodes: {
+                        scaling: { min: 10, max: 30, label: { enabled: false } },
+                        font: { color: '#fff' }
+                    }
+                };
+
+                if (!networkRef.current) {
+                    networkRef.current = new vis.Network(containerRef.current, data, options);
+                    
+                    // Add smooth zoom-in on load
+                    networkRef.current.once("afterDrawing", () => {
+                        networkRef.current.fit({ animation: { duration: 1000, easingFunction: 'easeOutQuint' } });
+                    });
+                } else {
+                    // Update data organically without destroying physics state
+                    networkRef.current.setData(data);
+                }
+
+            }, [dfa, stepData]);
+
+            return <div ref={containerRef} className="w-full h-full min-h-[500px]" />;
+        };
+
+        // 2. Premium Setup Component
+        const SetupPanel = ({ onStart }) => {
+            const [statesInput, setStatesInput] = useState(SAMPLE_DFA.states.join(', '));
+            const [alphabetInput, setAlphabetInput] = useState(SAMPLE_DFA.alphabet.join(', '));
+            const [startState, setStartState] = useState(SAMPLE_DFA.startState);
+            const [acceptingStates, setAcceptingStates] = useState(SAMPLE_DFA.acceptingStates);
+            const [transitions, setTransitions] = useState(SAMPLE_DFA.transitions);
+
+            const states = statesInput.split(',').map(s => s.trim()).filter(s => s);
+            const alphabet = alphabetInput.split(',').map(s => s.trim()).filter(s => s);
+
+            const handleTransitionChange = (state, symbol, value) => {
+                setTransitions(prev => ({
+                    ...prev,
+                    [state]: { ...(prev[state] || {}), [symbol]: value.trim() }
+                }));
+            };
+
+            const handleAcceptingToggle = (state) => {
+                setAcceptingStates(prev => 
+                    prev.includes(state) ? prev.filter(s => s !== state) : [...prev, state]
+                );
+            };
+
+            const loadSample = () => {
+                setStatesInput(SAMPLE_DFA.states.join(', '));
+                setAlphabetInput(SAMPLE_DFA.alphabet.join(', '));
+                setStartState(SAMPLE_DFA.startState);
+                setAcceptingStates(SAMPLE_DFA.acceptingStates);
+                setTransitions(SAMPLE_DFA.transitions);
+            };
+
+            const start = () => {
+                onStart({ states, alphabet, startState, acceptingStates, transitions });
+            };
+
+            return (
+                <motion.div 
+                    initial={{ opacity: 0, y: 40, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    className="glass-panel p-8 rounded-3xl max-w-4xl mx-auto w-full relative overflow-hidden"
+                >
+                    {/* Glowing Accent Line */}
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-500"></div>
+
+                    <div className="flex justify-between items-center mb-8 border-b border-slate-700/50 pb-5">
+                        <h2 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+                            SYSTEM INIT: Define DFA
+                        </h2>
+                        <motion.button 
+                            whileHover={{ scale: 1.05, backgroundColor: "rgba(30, 41, 59, 1)" }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={loadSample} 
+                            className="text-sm px-5 py-2.5 rounded-lg bg-slate-800/50 border border-slate-600 text-cyan-100 transition-colors shadow-lg"
+                        >
+                            Load Simulation Data
+                        </motion.button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">States Matrix</label>
+                            <input type="text" value={statesInput} onChange={e => setStatesInput(e.target.value)} 
+                                className="w-full bg-slate-900/80 border border-slate-700 rounded-xl p-3 text-white neon-input outline-none transition-all font-mono"/>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Input Alphabet</label>
+                            <input type="text" value={alphabetInput} onChange={e => setAlphabetInput(e.target.value)} 
+                                className="w-full bg-slate-900/80 border border-slate-700 rounded-xl p-3 text-white neon-input outline-none transition-all font-mono"/>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Boot Node (Start)</label>
+                            <select value={startState} onChange={e => setStartState(e.target.value)} 
+                                className="w-full bg-slate-900/80 border border-slate-700 rounded-xl p-3 text-white neon-input outline-none transition-all font-mono cursor-pointer">
+                                {states.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Target Nodes (Accepting)</label>
+                            <div className="flex flex-wrap gap-2 p-2 bg-slate-900/80 border border-slate-700 rounded-xl min-h-[50px]">
+                                <AnimatePresence>
+                                    {states.map(s => (
+                                        <motion.label 
+                                            key={s} 
+                                            layout
+                                            initial={{ opacity: 0, scale: 0.8 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className={`flex items-center space-x-2 cursor-pointer px-3 py-1.5 rounded-full border transition-all ${acceptingStates.includes(s) ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-cyan-400'}`}
+                                        >
+                                            <input type="checkbox" checked={acceptingStates.includes(s)} onChange={() => handleAcceptingToggle(s)} className="hidden" />
+                                            <span className="font-mono text-sm font-bold">{s}</span>
+                                        </motion.label>
+                                    ))}
+                                </AnimatePresence>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mb-8">
+                        <label className="block text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">State Transition Matrix</label>
+                        <div className="overflow-x-auto rounded-xl border border-slate-700/80 shadow-2xl bg-slate-900/40">
+                            <table className="w-full text-left border-collapse backdrop-blur-sm">
+                                <thead>
+                                    <tr className="bg-slate-800/80 border-b border-slate-700 text-xs uppercase tracking-wider text-slate-400">
+                                        <th className="p-4 border-r border-slate-700 font-bold w-32">Current State</th>
+                                        {alphabet.map(a => <th key={a} className="p-4 border-slate-700 font-bold text-center">Receive '{a}'</th>)}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <AnimatePresence>
+                                        {states.map((state, idx) => (
+                                            <motion.tr 
+                                                initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.05 }}
+                                                key={state} className="border-b border-slate-700/50 hover:bg-slate-800/40 transition-colors"
+                                            >
+                                                <td className="p-4 border-r border-slate-700/50 font-mono text-cyan-400 flex items-center space-x-3">
+                                                    <span className="font-bold text-lg">{state}</span>
+                                                    <div className="flex gap-1">
+                                                        {startState === state && <span className="text-[10px] uppercase font-bold tracking-wider bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded shadow-[0_0_5px_rgba(59,130,246,0.5)]">Start</span>}
+                                                        {acceptingStates.includes(state) && <span className="text-[10px] uppercase font-bold tracking-wider bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded shadow-[0_0_5px_rgba(16,185,129,0.5)]">Acc</span>}
+                                                    </div>
+                                                </td>
+                                                {alphabet.map(symbol => (
+                                                    <td key={symbol} className="p-3 text-center relative group">
+                                                        <select 
+                                                            value={transitions[state]?.[symbol] || ''} 
+                                                            onChange={e => handleTransitionChange(state, symbol, e.target.value)}
+                                                            className="w-24 bg-slate-800/80 border border-slate-600 rounded-lg p-2 text-white outline-none focus:border-cyan-400 focus:shadow-[0_0_10px_rgba(6,182,212,0.4)] transition-all font-mono text-sm appearance-none cursor-pointer text-center"
+                                                        >
+                                                            <option value="">--</option>
+                                                            {states.map(s => <option key={s} value={s}>{s}</option>)}
+                                                        </select>
+                                                        {/* Custom dropdown arrow */}
+                                                        <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 group-hover:text-cyan-400 transition-colors">▼</div>
+                                                    </td>
+                                                ))}
+                                            </motion.tr>
+                                        ))}
+                                    </AnimatePresence>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <motion.button 
+                        whileHover={{ scale: 1.02, boxShadow: "0px 0px 25px rgba(6, 182, 212, 0.6)" }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={start} 
+                        className="relative w-full py-5 rounded-2xl font-bold text-xl uppercase tracking-widest overflow-hidden group bg-slate-800 border border-cyan-500/30"
+                    >
+                        {/* Animated Gradient Background */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 opacity-80 group-hover:opacity-100 transition-opacity"></div>
+                        <span className="relative z-10 text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)]">Boot Sequence // Optimize</span>
+                    </motion.button>
+                </motion.div>
+            );
+        };
+
+        // NEW: Learning Panel Component
+        const LearningPanel = ({ setMode }) => {
+            const [learningSteps] = useState(() => generateMinimizationSteps(SAMPLE_DFA));
+            const [activeTab, setActiveTab] = useState(0);
+
+            const tabs = [
+                {
+                    title: "1. The Core Objective",
+                    content: "DFA Minimization reduces the number of states in a Deterministic Finite Automaton (DFA) while preserving the exact language it recognizes. Think of it as optimizing a circuit to use the fewest possible logic gates. We eliminate redundancy to save memory and processing cycles.",
+                    stepIndex: 0
+                },
+                {
+                    title: "2. Pruning Unreachable Nodes",
+                    content: "Before any complex analysis, we traverse the graph starting from the Boot Node (Start State). Any node that cannot be reached by a valid sequence of inputs is considered 'dead code'. We surgically remove these unreachable states to clean the matrix.",
+                    stepIndex: 0
+                },
+                {
+                    title: "3. 0-Equivalence (Initial Partition)",
+                    content: "We divide all remaining states into two distinct clusters: \n1. Accepting (Target) States\n2. Non-Accepting States\n\nA state that accepts can NEVER be equivalent to one that rejects. This creates our baseline, known as the 0-Equivalence partition (π₀).",
+                    stepIndex: 1
+                },
+                {
+                    title: "4. K-Equivalence Refinement",
+                    content: "For each cluster, we test the states inside. If two states in the same cluster transition to DIFFERENT clusters for the exact same input symbol, they are distinguishable. We must split the cluster! We repeat this process (π₁, π₂, ...) until no more splits occur. The system has officially stabilized.",
+                    stepIndex: learningSteps.length - 2 // The stabilized step (shows visual merging)
+                },
+                {
+                    title: "5. Synthesizing the Minimal DFA",
+                    content: "Once stabilization is reached, states that share the same final cluster are strictly equivalent. We fuse them into a single super-node. The resulting architecture is the absolute mathematically minimal DFA for the recognized language.",
+                    stepIndex: learningSteps.length - 1 // Final step
+                }
+            ];
+
+            return (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }} className="h-screen w-full flex flex-col bg-transparent">
+                    <header className="glass px-6 py-4 flex justify-between items-center border-b border-white/10 z-20 shadow-2xl relative">
+                        <div className="flex items-center space-x-6 w-1/3">
+                            <h1 className="text-2xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500 drop-shadow-lg">
+                                ACADEMY // DATABANKS
+                            </h1>
+                        </div>
+                        
+                        <div className="flex justify-center w-1/3">
+                            <ModeSelector mode="learning" setMode={setMode} />
+                        </div>
+                        
+                        <div className="w-1/3 flex justify-end">
+                            <div className="flex items-center space-x-2 bg-slate-900/80 px-4 py-1.5 rounded-full border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                                <span className="text-emerald-400 text-xs font-bold font-mono tracking-widest">
+                                    CHAPTER {activeTab + 1} / {tabs.length}
+                                </span>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="flex-1 flex overflow-hidden relative z-10">
+                        <aside className="w-[500px] border-r border-emerald-900/30 glass-panel flex flex-col z-20 shrink-0 shadow-[20px_0_30px_-10px_rgba(0,0,0,0.5)] p-8 overflow-y-auto">
+                            <h2 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-cyan-500 mb-8">
+                                Optimization Theory
+                            </h2>
+                            <div className="space-y-4">
+                                {tabs.map((tab, idx) => (
+                                    <div key={idx} className={`border rounded-2xl overflow-hidden transition-all duration-300 ${activeTab === idx ? 'border-emerald-500/50 bg-emerald-900/20 shadow-[0_0_20px_rgba(16,185,129,0.2)]' : 'border-slate-700/50 bg-slate-900/40 hover:border-slate-500'}`}>
+                                        <button 
+                                            onClick={() => setActiveTab(idx)}
+                                            className="w-full text-left p-5 flex justify-between items-center font-bold text-white tracking-wide"
+                                        >
+                                            <span>{tab.title}</span>
+                                            <span className={`transform transition-transform ${activeTab === idx ? 'rotate-180 text-emerald-400' : 'text-slate-500'}`}>▼</span>
+                                        </button>
+                                        <AnimatePresence>
+                                            {activeTab === idx && (
+                                                <motion.div 
+                                                    initial={{ height: 0, opacity: 0 }} 
+                                                    animate={{ height: 'auto', opacity: 1 }} 
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    className="px-5 pb-5 text-slate-300 text-sm leading-relaxed"
+                                                >
+                                                    {tab.content}
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                ))}
+                            </div>
+                        </aside>
+                        
+                        <section className="flex-1 relative z-10">
+                             {/* Mini HUD for the learning graph */}
+                             <div className="absolute top-6 left-6 glass px-5 py-3 rounded-2xl z-20 shadow-xl border-emerald-500/20 pointer-events-none">
+                                <div className="text-[10px] font-black text-emerald-500 mb-1 uppercase tracking-widest">Live Simulation Matrix</div>
+                                <div className="text-xs text-slate-300 font-mono">Tracking Graph Step: {tabs[activeTab].stepIndex + 1}</div>
+                             </div>
+                             <DfaGraph key={`learn-${activeTab}`} dfa={SAMPLE_DFA} stepData={learningSteps[tabs[activeTab].stepIndex]} />
+                        </section>
+                    </main>
+                </motion.div>
+            );
+        };
+
+        // NEW: Quiz Panel Component
+        const QuizPanel = ({ setMode }) => {
+            const [qIndex, setQIndex] = useState(0);
+            const [selectedOption, setSelectedOption] = useState(null);
+            const [showResult, setShowResult] = useState(false);
+
+            const q = QUIZ_QUESTIONS[qIndex];
+            
+            // Generate basic step data to render the raw DFA graph
+            const quizStepData = {
+                partitions: [q.dfa.states], // Keep all nodes the exact same color naturally
+                isFinal: false,
+                isStabilized: false
+            };
+
+            const handleSelect = (idx) => {
+                if (showResult) return;
+                setSelectedOption(idx);
+                setShowResult(true);
+            };
+
+            const nextQuestion = () => {
+                if (qIndex < QUIZ_QUESTIONS.length - 1) {
+                    setQIndex(qIndex + 1);
+                    setSelectedOption(null);
+                    setShowResult(false);
+                } else {
+                    setQIndex(0); // Loop or restart
+                    setSelectedOption(null);
+                    setShowResult(false);
+                }
+            };
+
+            return (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }} className="h-screen w-full flex flex-col bg-transparent">
+                    <header className="glass px-6 py-4 flex justify-between items-center border-b border-white/10 z-20 shadow-2xl relative">
+                        <div className="flex items-center space-x-6 w-1/3">
+                            <h1 className="text-2xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 drop-shadow-lg">
+                                PROTOCOL // ASSESSMENT
+                            </h1>
+                        </div>
+                        
+                        <div className="flex justify-center w-1/3">
+                            <ModeSelector mode="quiz" setMode={setMode} />
+                        </div>
+                        
+                        <div className="w-1/3 flex justify-end">
+                            <div className="flex items-center space-x-2 bg-slate-900/80 px-4 py-1.5 rounded-full border border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+                                <span className="text-amber-400 text-xs font-bold font-mono tracking-widest">
+                                    MODULE {qIndex + 1} / {QUIZ_QUESTIONS.length}
+                                </span>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="flex-1 flex overflow-hidden relative z-10">
+                        <aside className="w-[500px] border-r border-amber-900/30 glass-panel flex flex-col z-20 shrink-0 shadow-[20px_0_30px_-10px_rgba(0,0,0,0.5)] p-8 overflow-y-auto">
+                            <h2 className="text-[10px] font-black text-amber-500 mb-3 uppercase tracking-widest">Current Challenge</h2>
+                            <p className="text-xl text-white font-bold mb-8 leading-relaxed">
+                                {q.text}
+                            </p>
+
+                            <div className="space-y-4 mb-8">
+                                {q.options.map((opt, idx) => {
+                                    let btnClass = "border-slate-700/50 bg-slate-900/40 text-slate-300 hover:border-amber-500/50 hover:bg-amber-900/20";
+                                    if (showResult) {
+                                        if (opt.isCorrect) btnClass = "border-emerald-500 bg-emerald-900/40 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.3)]";
+                                        else if (selectedOption === idx) btnClass = "border-red-500 bg-red-900/40 text-red-300 shadow-[0_0_15px_rgba(239,68,68,0.3)]";
+                                        else btnClass = "border-slate-800 bg-slate-950/40 text-slate-600 opacity-50";
+                                    }
+
+                                    return (
+                                        <button
+                                            key={idx}
+                                            onClick={() => handleSelect(idx)}
+                                            disabled={showResult}
+                                            className={`w-full p-5 text-left rounded-2xl border font-mono tracking-wide transition-all duration-300 ${btnClass}`}
+                                        >
+                                            <span className="mr-3 text-slate-500 font-bold">{['A','B','C','D'][idx]}.</span>
+                                            {opt.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <AnimatePresence>
+                                {showResult && (
+                                    <motion.div 
+                                        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                                        className={`p-6 rounded-2xl border ${q.options[selectedOption].isCorrect ? 'border-emerald-500/50 bg-emerald-900/20' : 'border-red-500/50 bg-red-900/20'}`}
+                                    >
+                                        <h3 className={`text-lg font-black mb-2 uppercase tracking-wide ${q.options[selectedOption].isCorrect ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {q.options[selectedOption].isCorrect ? 'Target Acquired' : 'System Error'}
+                                        </h3>
+                                        <p className="text-sm text-slate-300 leading-relaxed mb-6">
+                                            {q.explanation}
+                                        </p>
+                                        <button 
+                                            onClick={nextQuestion}
+                                            className="w-full py-3 rounded-xl font-bold uppercase tracking-widest bg-slate-800 border border-slate-600 text-white hover:bg-amber-600 hover:border-amber-400 transition-colors shadow-lg"
+                                        >
+                                            {qIndex < QUIZ_QUESTIONS.length - 1 ? 'Next Module' : 'Restart Assessment'}
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </aside>
+
+                        <section className="flex-1 relative z-10">
+                             <DfaGraph key={`quiz-${qIndex}`} dfa={q.dfa} stepData={quizStepData} />
+                        </section>
+                    </main>
+                </motion.div>
+            );
+        };
+
+        // 3. Main Application Engine Component (Simulation Flow - Unmodified Logic)
+        const SimulationMode = ({ setMode }) => {
+            const [dfa, setDfa] = useState(null);
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+
+            useEffect(() => {
+                if (dfa) {
+                    const generatedSteps = generateMinimizationSteps(dfa);
+                    setSteps(generatedSteps);
+                    setCurrentStepIndex(0);
+                }
+            }, [dfa]);
+
+            // Auto-play chronometer
+            useEffect(() => {
+                let interval;
+                if (isPlaying) {
+                    interval = setInterval(() => {
+                        setCurrentStepIndex(prev => {
+                            if (prev < steps.length - 1) return prev + 1;
+                            setIsPlaying(false);
+                            return prev;
+                        });
+                    }, 3500); // Slower for premium feel (3.5s per step)
+                }
+                return () => clearInterval(interval);
+            }, [isPlaying, steps.length]);
+
+            if (!dfa) {
+                return (
+                    <div className="relative min-h-screen flex flex-col items-center justify-center p-4 pt-28 pb-10">
+                        <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950"></div>
+                        
+                        {/* Insert ModeSelector globally on setup page */}
+                        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50">
+                            <ModeSelector mode="simulation" setMode={setMode} />
+                        </div>
+
+                        <div className="z-10 w-full">
+                            <motion.div 
+                                initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}
+                                className="text-center mb-10"
+                            >
+                                <h1 className="text-6xl font-extrabold tracking-tighter mb-4 text-white drop-shadow-2xl">
+                                    DFA <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 filter drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]">NEXUS</span>
+                                </h1>
+                                <p className="text-slate-400 max-w-2xl mx-auto text-lg font-medium tracking-wide">
+                                    Advanced Interactive Partition Refinement Simulation. 
+                                </p>
+                            </motion.div>
+                            <SetupPanel onStart={setDfa} />
+                        </div>
+                    </div>
+                );
+            }
+
+            const currentStep = steps[currentStepIndex];
+            if (!currentStep) return null;
+
+            return (
+                <motion.div 
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1 }}
+                    className="h-screen w-full flex flex-col bg-transparent"
+                >
+                    {/* Header HUD */}
+                    <header className="glass px-6 py-4 flex justify-between items-center border-b border-white/10 z-20 shadow-2xl relative">
+                        <div className="absolute bottom-0 left-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent w-full opacity-50"></div>
+                        <div className="flex items-center space-x-6 w-1/3">
+                            <h1 className="text-2xl font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 drop-shadow-lg">
+                                NEXUS VISUALIZER
+                            </h1>
+                            <div className="flex items-center space-x-2 bg-slate-900/80 px-4 py-1.5 rounded-full border border-cyan-500/30 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+                                <span className="text-cyan-400 animate-pulse text-xs">●</span>
+                                <span className="text-slate-300 text-xs font-bold font-mono tracking-widest">
+                                    PHASE {currentStepIndex + 1} / {steps.length}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Insert ModeSelector into header dynamically */}
+                        <div className="flex justify-center w-1/3">
+                            <ModeSelector mode="simulation" setMode={setMode} />
+                        </div>
+
+                        <div className="w-1/3 flex items-center justify-end space-x-4">
+                            <motion.button 
+                                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                                onClick={() => setIsPlaying(!isPlaying)}
+                                className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl font-bold uppercase text-xs tracking-wider transition-all shadow-lg ${isPlaying ? 'bg-amber-500/10 text-amber-400 border border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'bg-blue-600/80 hover:bg-blue-500 text-white border border-blue-400/50 shadow-[0_0_15px_rgba(59,130,246,0.4)]'}`}
+                            >
+                                {isPlaying ? <><PauseIcon/> <span>Halt Routine</span></> : <><PlayIcon/> <span>Auto Sequence</span></>}
+                            </motion.button>
+                            
+                            <motion.button 
+                                whileHover={currentStepIndex !== steps.length - 1 ? { scale: 1.05, boxShadow: "0 0 15px rgba(16, 185, 129, 0.4)" } : {}} 
+                                whileTap={currentStepIndex !== steps.length - 1 ? { scale: 0.95 } : {}}
+                                onClick={() => setCurrentStepIndex(p => Math.min(steps.length - 1, p + 1))}
+                                disabled={currentStepIndex === steps.length - 1}
+                                className="flex items-center space-x-2 px-5 py-2.5 bg-slate-800/80 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-emerald-400 border border-emerald-500/30 uppercase text-xs font-bold tracking-wider"
+                            >
+                                <span>Next Phase</span> <NextIcon/>
+                            </motion.button>
+
+                            <div className="w-px h-8 bg-slate-700/50 mx-2"></div>
+
+                            <motion.button 
+                                whileHover={{ scale: 1.05, backgroundColor: "rgba(239, 68, 68, 0.1)", color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.5)" }} 
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => setDfa(null)}
+                                className="flex items-center space-x-2 px-4 py-2.5 bg-slate-800/50 rounded-xl text-slate-400 border border-slate-600/50 transition-all uppercase text-xs font-bold"
+                            >
+                                <ResetIcon/> <span>Reboot</span>
+                            </motion.button>
+                        </div>
+                    </header>
+
+                    {/* Main Layout */}
+                    <main className="flex-1 flex overflow-hidden relative z-10">
+                        
+                        {/* Data Telemetry Sidebar */}
+                        <motion.aside 
+                            initial={{ x: -600, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: "spring", stiffness: 60, damping: 15 }}
+                            className="w-[450px] lg:w-[500px] border-r border-cyan-900/30 glass-panel flex flex-col z-20 shrink-0 shadow-[20px_0_30px_-10px_rgba(0,0,0,0.5)]"
+                        >
+                            <div className="p-8 overflow-y-auto h-full scroll-smooth">
+                                <AnimatePresence mode="wait">
+                                    <motion.div 
+                                        key={currentStepIndex}
+                                        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.4 }}
+                                    >
+                                        <h2 className="text-2xl font-black mb-4 text-white uppercase tracking-wide drop-shadow-md">{currentStep.title}</h2>
+                                        
+                                        {currentStep.piNotation && (
+                                            <div className="mb-6 p-4 bg-slate-950/80 rounded-xl border-l-4 border-cyan-500 font-mono text-cyan-300 text-sm overflow-x-auto whitespace-nowrap shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
+                                                {currentStep.piNotation}
+                                            </div>
+                                        )}
+
+                                        <p className="text-slate-300 leading-relaxed mb-8 bg-slate-800/40 p-5 rounded-xl border border-slate-700/50 backdrop-blur-sm text-sm">
+                                            {currentStep.description}
+                                        </p>
+
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-xs font-bold tracking-widest text-slate-500 uppercase">Memory Partitions</h3>
+                                            <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-1 rounded font-mono border border-slate-700">COUNT: {currentStep.partitions.length}</span>
+                                        </div>
+                                        
+                                        <LayoutGroup>
+                                            <div className="space-y-4">
+                                                <AnimatePresence>
+                                                    {currentStep.partitions.map((group, idx) => {
+                                                        const color = PARTITION_COLORS[idx % PARTITION_COLORS.length];
+                                                        const groupKey = currentStep.isFinal ? `final-${idx}` : group.join('-');
+                                                        return (
+                                                            <motion.div 
+                                                                layout
+                                                                initial={{ opacity: 0, scale: 0.9, x: -20 }} 
+                                                                animate={{ opacity: 1, scale: 1, x: 0 }} 
+                                                                exit={{ opacity: 0, scale: 0.9 }}
+                                                                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                                                                key={groupKey} 
+                                                                className="p-5 rounded-2xl border relative overflow-hidden backdrop-blur-md"
+                                                                style={{ 
+                                                                    backgroundColor: `${color.bg}15`, 
+                                                                    borderColor: `${color.border}50`,
+                                                                    boxShadow: `0 8px 30px -10px ${color.shadow}40`
+                                                                }}
+                                                            >
+                                                                <div className="absolute left-0 top-0 bottom-0 w-1 opacity-50" style={{ backgroundColor: color.border }}></div>
+                                                                
+                                                                <div className="flex items-center space-x-3 mb-3">
+                                                                    <div className="w-3 h-3 rounded-full shadow-[0_0_10px_currentColor]" style={{ backgroundColor: color.bg, color: color.shadow }}></div>
+                                                                    <span className="font-black text-white text-md tracking-wider">
+                                                                        {currentStep.isFinal ? `MERGED NODE {${group.join(',')}}` : `CLUSTER ${idx + 1}`}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-2 pl-6">
+                                                                    {!currentStep.isFinal && group.map(state => (
+                                                                        <span key={state} className="font-mono font-bold bg-slate-900/90 text-slate-200 px-3 py-1.5 rounded-lg text-sm border shadow-inner" style={{ borderColor: `${color.border}30` }}>
+                                                                            {state} {dfa.acceptingStates.includes(state) && <span className="text-emerald-400 ml-1 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]">★</span>}
+                                                                        </span>
+                                                                    ))}
+                                                                    {currentStep.isFinal && (
+                                                                        <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">Optimization Complete.</span>
+                                                                    )}
+                                                                </div>
+                                                            </motion.div>
+                                                        );
+                                                    })}
+                                                </AnimatePresence>
+                                            </div>
+                                        </LayoutGroup>
+                                        
+                                        {/* Intermediate Partition Table */}
+                                        {currentStep.partitionTable && !currentStep.isFinal && (
+                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="mt-10">
+                                                <h3 className="text-xs font-bold tracking-widest text-blue-400 uppercase mb-3 flex items-center"><span className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-ping"></span> Transition Signature</h3>
+                                                <div className="overflow-x-auto rounded-xl border border-slate-700/60 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] bg-slate-900/60 backdrop-blur-md">
+                                                    <table className="w-full text-left text-xs">
+                                                        <thead className="bg-slate-800/80 text-slate-300">
+                                                            <tr>
+                                                                <th className="p-3 border-b border-slate-700/80 font-bold uppercase tracking-wider w-16">Node</th>
+                                                                {dfa.alphabet.map(a => <th key={a} className="p-3 border-b border-slate-700/80 font-bold text-center">Via '{a}'</th>)}
+                                                                <th className="p-3 border-b border-slate-700/80 font-black text-center bg-blue-900/30 text-blue-300">New Target</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {currentStep.partitionTable.map((row, i) => {
+                                                                const groupColor = PARTITION_COLORS[row.newGroupIndex % PARTITION_COLORS.length];
+                                                                return (
+                                                                <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-800/60 transition-colors">
+                                                                    <td className="p-3 font-mono text-emerald-400 font-bold border-r border-slate-700/30">{row.state}</td>
+                                                                    {dfa.alphabet.map(a => (
+                                                                        <td key={a} className="p-3 text-slate-300 text-center font-mono">
+                                                                            {row.inputs[a] !== '-' ? `C${row.inputs[a] + 1}` : '-'}
+                                                                        </td>
+                                                                    ))}
+                                                                    <td className="p-3 text-center font-black border-l border-slate-700/30 bg-slate-950/30" style={{ color: groupColor.shadow, textShadow: `0 0 10px ${groupColor.shadow}80` }}>
+                                                                        CLUSTER {row.newGroupIndex + 1}
+                                                                    </td>
+                                                                </tr>
+                                                            )})}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Final Minimized Table */}
+                                        {currentStep.finalTransitions && (
+                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="mt-10">
+                                                <h3 className="text-xs font-bold tracking-widest text-emerald-400 uppercase mb-3 flex items-center"><span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 shadow-[0_0_8px_currentColor]"></span> Optimized Blueprint</h3>
+                                                <div className="overflow-x-auto rounded-xl border border-emerald-900/50 shadow-[0_10px_30px_-10px_rgba(16,185,129,0.3)] bg-slate-900/80">
+                                                    <table className="w-full text-left text-sm">
+                                                        <thead className="bg-emerald-950/40 text-emerald-200">
+                                                            <tr>
+                                                                <th className="p-4 border-b border-emerald-900/50 font-bold uppercase tracking-wider">Merged Node</th>
+                                                                {dfa.alphabet.map(a => <th key={a} className="p-4 border-b border-emerald-900/50 font-bold text-center">Via '{a}'</th>)}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {currentStep.finalTransitions.map((row, i) => (
+                                                                <tr key={i} className="border-b border-emerald-900/20 hover:bg-emerald-900/20 transition-colors">
+                                                                    <td className="p-4 font-mono text-white font-black border-r border-emerald-900/30">{row.state}</td>
+                                                                    {dfa.alphabet.map(a => (
+                                                                        <td key={a} className="p-4 font-mono text-emerald-300 text-center font-bold">{row.transitions[a]}</td>
+                                                                    ))}
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </motion.div>
+                                </AnimatePresence>
+
+                                {/* Progress Tracker Timeline - Animated */}
+                                <div className="mt-16 pt-8 border-t border-slate-700/50 pb-8">
+                                    <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Execution Timeline</h3>
+                                    <div className="relative w-full h-1 bg-slate-800 rounded-full">
+                                        {/* Filled track */}
+                                        <motion.div 
+                                            className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 to-cyan-400 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.5)]"
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${(currentStepIndex / (steps.length - 1)) * 100}%` }}
+                                            transition={{ type: "spring", stiffness: 50, damping: 15 }}
+                                        ></motion.div>
+                                        
+                                        <div className="absolute top-1/2 left-0 right-0 flex justify-between transform -translate-y-1/2">
+                                            {steps.map((_, idx) => (
+                                                <div key={idx} className="relative">
+                                                    <motion.div 
+                                                        animate={{
+                                                            scale: idx === currentStepIndex ? 1.5 : 1,
+                                                            backgroundColor: idx === currentStepIndex ? '#22d3ee' : idx < currentStepIndex ? '#3b82f6' : '#1e293b',
+                                                            borderColor: idx === currentStepIndex ? '#fff' : idx < currentStepIndex ? '#60a5fa' : '#334155'
+                                                        }}
+                                                        className="w-3 h-3 rounded-full border-2 cursor-pointer z-10 relative"
+                                                        onClick={() => setCurrentStepIndex(idx)}
+                                                    ></motion.div>
+                                                    {idx === currentStepIndex && (
+                                                        <motion.div 
+                                                            layoutId="glow"
+                                                            className="absolute inset-0 bg-cyan-400 rounded-full filter blur-md -z-10"
+                                                            style={{ transform: 'scale(2.5)' }}
+                                                        ></motion.div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.aside>
+
+                        {/* Visualizer Canvas Area */}
+                        <section className="flex-1 relative z-10">
+                            
+                            {/* HUD Legend */}
+                            <motion.div 
+                                initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+                                className="absolute top-6 right-6 glass px-5 py-4 rounded-2xl z-20 shadow-2xl border-cyan-500/20 pointer-events-none"
+                            >
+                                <div className="text-[10px] font-black text-cyan-500 mb-3 uppercase tracking-widest text-center">Telemetry Legend</div>
+                                <div className="space-y-3 text-xs font-bold text-slate-300 font-mono tracking-wider">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-5 h-5 rounded-full border-[3px] border-slate-400 shadow-[0_0_8px_rgba(148,163,184,0.5)]"></div>
+                                        <span>Standard Node</span>
+                                    </div>
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-5 h-5 rounded-full border-[3px] border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.8)] relative flex items-center justify-center">
+                                            <div className="absolute w-3 h-3 border border-emerald-400 border-dashed rounded-full animate-spin-slow"></div>
+                                        </div>
+                                        <span>Target (Accepting)</span>
+                                    </div>
+                                    <div className="flex items-center space-x-3 mt-3 pt-3 border-t border-slate-700/50">
+                                        <div className="w-8 h-1 bg-gradient-to-r from-transparent to-cyan-400 relative rounded-full">
+                                            <div className="absolute right-[-4px] top-1/2 -translate-y-1/2 border-[5px] border-transparent border-l-cyan-400"></div>
+                                        </div>
+                                        <span>Data Flow</span>
+                                    </div>
+                                </div>
+                            </motion.div>
+
+                            <DfaGraph dfa={dfa} stepData={currentStep} />
+                        </section>
+
+                    </main>
+                </motion.div>
+            );
+        };
+
+        // NEW: Root App Wrapper switching modes
+        const App = () => {
+            const [mode, setMode] = useState('simulation');
+            
+            return (
+                <div className="relative min-h-screen w-full font-sans text-slate-100">
+                    {mode === 'simulation' && <SimulationMode setMode={setMode} />}
+                    {mode === 'learning' && <LearningPanel setMode={setMode} />}
+                    {mode === 'quiz' && <QuizPanel setMode={setMode} />}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
