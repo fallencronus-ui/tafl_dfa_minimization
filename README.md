@@ -65,3 +65,5 @@ git commit -m "INIT: Deploy DFA Minimizer Visualizer"
 git branch -M main
 git remote add origin [https://github.com/YOUR_USERNAME/dfa-nexus-visualizer.git](https://github.com/YOUR_USERNAME/dfa-nexus-visualizer.git)
 git push -u origin main
+
+Website - https://fallencronus-ui.github.io/tafl_dfa_minimization/
