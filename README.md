@@ -56,6 +56,8 @@ Because this project is contained within a single, powerful `index.html` file us
 2. Clone it locally or upload directly via the GitHub UI.
 3. Ensure your main visualizer file is named exactly `index.html` and is located in the root directory.
 
+🔗Live Website - https://fallencronus-ui.github.io/tafl_dfa_minimization/
+
 ### Step 2: Push to GitHub
 If using the terminal:
 ```bash
@@ -66,4 +68,4 @@ git branch -M main
 git remote add origin [https://github.com/YOUR_USERNAME/dfa-nexus-visualizer.git](https://github.com/YOUR_USERNAME/dfa-nexus-visualizer.git)
 git push -u origin main
 
-Website - https://fallencronus-ui.github.io
+
